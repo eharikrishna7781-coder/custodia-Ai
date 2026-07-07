@@ -9,11 +9,13 @@ import {
   MessageSquare,
   MapPin,
   Navigation,
+  Ambulance,
   Car,
   FileText,
   CheckCircle,
   X,
   Menu,
+  AlertTriangle,
 } from 'lucide-react';
 
 const MapComponent = dynamic(
@@ -55,6 +57,9 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [symptomHistory, setSymptomHistory] = useState([]);
+  const [careReminders, setCareReminders] = useState([]);
+  const [emergencyTriggered, setEmergencyTriggered] = useState(false);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -66,6 +71,27 @@ export default function Home() {
       );
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      const storedHistory = window.localStorage.getItem('custodia_symptom_history');
+      const storedReminders = window.localStorage.getItem('custodia_reminders');
+      if (storedHistory) setSymptomHistory(JSON.parse(storedHistory));
+      if (storedReminders) setCareReminders(JSON.parse(storedReminders));
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('custodia_symptom_history', JSON.stringify(symptomHistory));
+    } catch (_) {}
+  }, [symptomHistory]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('custodia_reminders', JSON.stringify(careReminders));
+    } catch (_) {}
+  }, [careReminders]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -101,6 +127,28 @@ export default function Home() {
     setMessages(prev => [...prev, { role, text, type, timestamp: new Date().toLocaleTimeString() }]);
   };
 
+  const addSymptomEntry = (symptom, triage = null) => {
+    setSymptomHistory(prev => [{
+      id: Date.now(),
+      symptom,
+      diagnosis: triage?.diagnosis || null,
+      needsDoctor: triage?.needsDoctor ?? null,
+      time: new Date().toLocaleTimeString(),
+    }, ...prev].slice(0, 6));
+  };
+
+  const addReminderEntries = (triage) => {
+    const meds = (triage?.suggestedMedicines || []).map((med, index) => ({
+      id: `${Date.now()}-${index}`,
+      name: med.name || 'Medicine',
+      schedule: `${med.dosage || 'As advised'} · ${med.frequency || 'as needed'} · ${med.duration || 'as directed'} · ${med.timing || 'as advised'}`,
+      type: med.type || 'OTC',
+    }));
+    if (meds.length > 0) {
+      setCareReminders(prev => [...meds, ...prev].slice(0, 8));
+    }
+  };
+
   const goToStep = (num) => {
     setStep(num);
     setShowSidebar(true);
@@ -127,8 +175,32 @@ export default function Home() {
       });
       const data = await res.json();
       setSessionId(data.sessionId);
-      addMessage('bot', data.message);
-      speakResponse(data.message, lang);
+
+      if (data.triage) {
+        addSymptomEntry(userMsg, data.triage);
+        addReminderEntries(data.triage);
+      }
+
+      let botMessage = data.message || 'Here is your initial assessment.';
+      if (data.triage) {
+        const { diagnosis, suggestedMedicines, careInstructions } = data.triage;
+        if (diagnosis) {
+          botMessage += `\n\n🩺 Possible diagnosis: ${diagnosis}`;
+        }
+        if (suggestedMedicines && suggestedMedicines.length > 0) {
+          botMessage += '\n\n💊 Suggested medicines:';
+          suggestedMedicines.forEach((med) => {
+            const details = [med.name, med.dosage, med.frequency, med.duration && `for ${med.duration}`, med.timing, med.type && `(${med.type})`].filter(Boolean);
+            botMessage += `\n- ${details.join(' · ')}`;
+          });
+        }
+        if (careInstructions) {
+          botMessage += `\n\n🏠 Care instructions:\n${careInstructions}`;
+        }
+      }
+
+      addMessage('bot', botMessage);
+      speakResponse(botMessage, lang);
 
       if (data.clinics && data.clinics.length > 0) {
         setClinics(data.clinics);
@@ -137,7 +209,7 @@ export default function Home() {
         speakResponse('Please select a clinic', lang);
       } else {
         goToStep(5);
-        addMessage('bot', 'You may not need a doctor. Stay safe!');
+        addMessage('bot', 'No clinic is needed right now. Please follow the care instructions and seek medical help if symptoms worsen.');
       }
     } catch (err) {
       addMessage('bot', 'Something went wrong. Please try again.');
@@ -196,6 +268,19 @@ export default function Home() {
       addMessage('bot', 'Could not book transport.');
     }
     setLoading(false);
+  };
+
+  const handleEmergency = async () => {
+    setEmergencyTriggered(true);
+    addMessage('user', '🚨 Emergency assistance requested');
+    addMessage('bot', '🚑 Emergency protocol activated. Please call emergency services immediately if symptoms are severe.');
+    if (sessionId) {
+      await handleTransportChoice('ambulance');
+    } else {
+      setTransport({ type: 'ambulance', driver: 'Emergency Ambulance', eta_pickup: 5, eta_destination: 10, label: 'Ambulance' });
+      goToStep(3);
+      addMessage('bot', 'Ambulance arrangement is being prepared.', 'tracking');
+    }
   };
 
   const handleGenerateReport = async () => {
@@ -279,6 +364,7 @@ export default function Home() {
     setTrackingData(null);
     setSessionId(null);
     setShowSidebar(false);
+    setEmergencyTriggered(false);
     addMessage('bot', '👋 Hello! Describe your symptoms or upload an image.');
   };
 
@@ -351,6 +437,9 @@ export default function Home() {
           </div>
 
           <div className="border-t border-slate-100 p-3 bg-white/80 flex items-center gap-2">
+            <button onClick={handleEmergency} className="p-2 rounded-xl hover:bg-red-50 text-red-600 transition" title="Emergency mode">
+              <AlertTriangle className="w-5 h-5" />
+            </button>
             <label className="cursor-pointer p-2 rounded-xl hover:bg-slate-100 transition">
               <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} capture="environment" />
               <ImageIcon className="w-5 h-5 text-slate-500" />
@@ -370,6 +459,43 @@ export default function Home() {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sticky top-24 space-y-4">
               <div className="map-wrapper h-44 sm:h-48">
                 <MapComponent userLocation={userLocation} clinics={clinics} selectedClinic={selectedClinic} trackingData={trackingData} />
+              </div>
+
+              <div className="space-y-3 border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Care plan</p>
+                  <span className="text-[10px] text-slate-400">Step {Math.min(step + 1, 5)} / 5</span>
+                </div>
+                {emergencyTriggered && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    Emergency assistance is active.
+                  </div>
+                )}
+                {symptomHistory.length > 0 && (
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-600 mb-2">Recent symptoms</p>
+                    <ul className="space-y-1.5 text-xs text-slate-600">
+                      {symptomHistory.slice(0, 3).map(entry => (
+                        <li key={entry.id} className="flex justify-between gap-2">
+                          <span className="truncate">{entry.symptom}</span>
+                          <span className="text-[10px] text-slate-400">{entry.time}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {careReminders.length > 0 && (
+                  <div className="rounded-xl bg-emerald-50 p-3 border border-emerald-100">
+                    <p className="text-xs font-semibold text-emerald-700 mb-2">Medicine reminders</p>
+                    <ul className="space-y-1.5 text-xs text-emerald-800">
+                      {careReminders.slice(0, 3).map(reminder => (
+                        <li key={reminder.id} className="leading-relaxed">
+                          <span className="font-medium">{reminder.name}</span> · {reminder.schedule}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               {step === 1 && clinics.length > 0 && (

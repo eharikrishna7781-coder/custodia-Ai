@@ -8,7 +8,6 @@ import { Navigation, MapPin } from 'lucide-react';
 export default function MapComponent({ userLocation, clinics, selectedClinic, trackingData }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
-  const routingControl = useRef(null);
   const [isClient, setIsClient] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
@@ -44,60 +43,35 @@ export default function MapComponent({ userLocation, clinics, selectedClinic, tr
   useEffect(() => {
     const map = mapInstance.current;
     if (!map) return;
-    // remove existing markers/polylines
-    map.eachLayer(layer => {
+
+    map.eachLayer((layer) => {
       if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-        try { map.removeLayer(layer); } catch (e) {}
+        map.removeLayer(layer);
       }
     });
 
-    // User marker
     const userIcon = L.divIcon({
-      html: `<div style="background:#0D9488; width:18px; height:18px; border-radius:50%; border:3px solid white;
-        box-shadow:0 2px 8px rgba(0,0,0,0.2);"></div>`,
-      iconSize: [18, 18],
-
       html: `<div style="background:#0D9488; width:18px; height:18px; border-radius:50%; border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,0.2);"></div>`,
       iconSize: [18, 18],
       iconAnchor: [9, 9],
     });
     L.marker([userLocation.lat, userLocation.lng], { icon: userIcon }).addTo(map).bindPopup('You');
 
-    // Clinic markers
     const clinicIcon = L.divIcon({
       html: `<div style="background:#3B82F6; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 2px 6px rgba(0,0,0,0.15);"></div>`,
       iconSize: [16, 16],
       iconAnchor: [8, 8],
     });
-    if (clinics) clinics.forEach(c => {
+    clinics?.forEach((c) => {
       L.marker([c.lat, c.lng], { icon: clinicIcon }).addTo(map).bindPopup(`<b>${c.name}</b><br>${c.distance_km} km · ${c.stock}% stock`);
     });
 
-    // Navigation
-    if (selectedClinic) {
-      if (isNavigating) {
-        if (routingControl.current) map.removeControl(routingControl.current);
-        routingControl.current = L.Routing.control({
-          waypoints: [
-            L.latLng(userLocation.lat, userLocation.lng),
-            L.latLng(selectedClinic.lat, selectedClinic.lng)
-          ],
-          routeWhileDragging: true,
-          showAlternatives: false,
-          lineOptions: { styles: [{ color: '#0D9488', weight: 4 }] },
-        }).addTo(map);
-        setTimeout(() => {
-          const bounds = routingControl.current.getPlan().getBounds();
-          if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
-        }, 500);
-      } else {
-        L.polyline([[userLocation.lat, userLocation.lng], [selectedClinic.lat, selectedClinic.lng]], {
-          color: '#0D9488', weight: 3, opacity: 0.6, dashArray: '6,5'
-        }).addTo(map);
-      }
+    if (selectedClinic && isNavigating) {
+      L.polyline([[userLocation.lat, userLocation.lng], [selectedClinic.lat, selectedClinic.lng]], {
+        color: '#0D9488', weight: 3, opacity: 0.6, dashArray: '6,5',
+      }).addTo(map);
     }
 
-    // Vehicle tracking
     if (trackingData) {
       const vehicleIcon = L.divIcon({
         html: `<div style="background:#F59E0B; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 12px rgba(245,158,11,0.5);"></div>`,
@@ -108,7 +82,7 @@ export default function MapComponent({ userLocation, clinics, selectedClinic, tr
     }
 
     const group = L.featureGroup();
-    map.eachLayer(layer => { if (layer instanceof L.Marker || layer instanceof L.Polyline) group.addLayer(layer); });
+    map.eachLayer((layer) => { if (layer instanceof L.Marker || layer instanceof L.Polyline) group.addLayer(layer); });
     if (group.getLayers().length > 0) map.fitBounds(group.getBounds(), { padding: [30, 30] });
   }, [clinics, selectedClinic, trackingData, userLocation, isNavigating]);
 

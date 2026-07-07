@@ -1,18 +1,19 @@
-import { createSession, getAllSessionIds } from '@/lib/agents';
-import fs from 'fs';
-import path from 'path';
+import { triageAgent, locatorAgent, createSession, updateSession } from '@/lib/agents';
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { symptoms, lat, lng, lang } = body;
-    const session = createSession({ symptoms, lat, lng, lang });
-    // Report whether the session is visible in-memory and whether sessions file exists.
-    const current = getAllSessionIds();
-    const sessionsFile = path.join(process.cwd(), 'data', 'sessions.json');
-    const persistedExists = fs.existsSync(sessionsFile);
-    return new Response(JSON.stringify({ sessionId: session.id, message: session.triage.message, clinics: session.clinics, currentSessions: current, persistedExists }), { status: 200 });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 });
+    const { symptoms, lat, lng, lang } = await request.json();
+    const sessionId = createSession(lat, lng, lang);
+    const triage = await triageAgent(symptoms, lang);
+    updateSession(sessionId, { triage, symptoms });
+    const response = { sessionId, triage, suggestDoctor: triage.needsDoctor, message: triage.needsDoctorMsg };
+    if (triage.needsDoctor) {
+      const clinics = locatorAgent(lat, lng);
+      response.clinics = clinics;
+      updateSession(sessionId, { clinics });
+    }
+    return Response.json(response);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
   }
 }
