@@ -19,7 +19,12 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
         <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js" defer></script>
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased bg-white dark:bg-slate-900 transition-colors duration-300">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
+}
 }
