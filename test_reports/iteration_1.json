@@ -1,0 +1,18 @@
+{
+  "summary": "Verified backend AI triage endpoints, /api/init flow with Hyderabad clinics, emergency triage, and frontend chat triage flow. All key features working correctly with AI-generated (Gemini) responses.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/health -> {status:ok, llm_configured:true}",
+    "POST /api/triage-ai (fever/headache/chills) -> AI-specific diagnosis mentioning malaria/dengue/viral, urgency_score=4, needs_doctor=true, suggested_medicines populated, care_instructions detailed",
+    "POST /api/triage-ai (skin rash) -> DIFFERENT AI response about allergic dermatitis/fungal, urgency=3, medicines Cetirizine + Hydrocortisone (skin-specific, not fever template)",
+    "POST /api/init (cough+fever, Hyderabad coords) -> aiGenerated:true, diagnosis mentions bronchitis/pneumonia/influenza, all 5 clinics in Hyderabad (Himayatnagar, Secunderabad, Dilsukhnagar, Jubilee Hills, Kukatpally), distances 0-10.4km (<20km)",
+    "POST /api/init (chest pain+difficulty breathing) -> urgency_score=5, needs_doctor=true, advice mentions calling 108/112, suggested_medicines empty (emergency)",
+    "Frontend loads at public URL with 'Custodia AI' title, language selector, triage step indicators visible",
+    "Frontend chat flow: typed 'I have high fever and body pain', pressed Enter, received real AI diagnosis mentioning dengue/malaria/chikungunya/typhoid specific to Hyderabad/Telangana, urgency 3/5, Paracetamol suggested, clinics rendered in sidebar with distances"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

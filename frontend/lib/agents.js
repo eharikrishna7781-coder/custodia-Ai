@@ -250,60 +250,26 @@ function triageFallback(symptoms, lang = 'en') {
 }
 
 export async function triageAgent(symptoms, lang = 'en') {
-  const langName = lang === 'hi' ? 'Hindi' : lang === 'ta' ? 'Tamil' : lang === 'te' ? 'Telugu' : lang === 'kn' ? 'Kannada' : lang === 'ml' ? 'Malayalam' : 'English';
-
-  const prompt = `
-You are a medical triage assistant for rural healthcare in India. Your role is to assess symptoms and provide guidance.
-
-IMPORTANT: This is for preliminary assessment only. Always recommend seeing a doctor for serious conditions.
-
-Patient symptoms: "${symptoms}"
-Language: ${langName}
-
-Analyze the symptoms carefully. Consider common conditions in rural India including:
-- Tropical diseases (malaria, dengue, typhoid)
-- Respiratory infections (TB, pneumonia, bronchitis)
-- Gastrointestinal issues (diarrhea, dysentery, worms)
-- Skin conditions (scabies, fungal infections)
-- Maternal and child health issues
-- Chronic conditions (diabetes, hypertension)
-- Injuries and wounds
-- Snake or insect bites
-
-Return ONLY valid JSON with these fields:
-{
-  "diagnosis": "Clear, simple description of the most likely condition in ${langName}",
-  "urgency_score": number 1-5 (1=low, 5=critical),
-  "needs_doctor": boolean,
-  "advice": "Clear medical advice in ${langName}",
-  "suggested_medicines": [
-    {
-      "name": "medicine name (generic preferred)",
-      "dosage": "how much (e.g., 1 tablet, 10ml)",
-      "type": "OTC or prescription",
-      "frequency": "how often (e.g., every 6 hours, twice daily)",
-      "duration": "for how many days",
-      "timing": "with or without food, morning or night"
-    }
-  ],
-  "care_instructions": "Home care steps in ${langName}: rest, diet, hydration, warning signs to watch for"
-}
-
-Rules:
-- Use simple language suitable for rural patients with limited medical knowledge
-- Set "needs_doctor" to true for urgency_score >= 4 or any serious condition
-- Include dosage in common units (tablets, ml)
-- Mention if medicine is OTC (over-the-counter) or prescription
-- Provide practical home care advice
-- Flag danger signs that require immediate medical attention
-- Respond in ${langName} for all text fields
-- Do NOT include any markdown symbols, asterisks, or special formatting
-`;
-
-  const response = await callGemini(prompt);
+  const backendUrl = process.env.INTERNAL_BACKEND_URL || 'http://localhost:8001';
 
   try {
-    const parsed = extractJsonPayload(response) || {};
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const resp = await fetch(`${backendUrl}/api/triage-ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symptoms, lang }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      console.warn('Triage AI backend returned', resp.status);
+      throw new Error(`AI backend ${resp.status}`);
+    }
+
+    const parsed = await resp.json();
     const fallback = triageFallback(symptoms, lang);
 
     const needsDoctor = parsed.needs_doctor ?? fallback.needsDoctor;
@@ -321,8 +287,10 @@ Rules:
       needsDoctorMsg: needsDoctor
         ? getTranslation(lang, 'triage', 'needsDoctor')
         : getTranslation(lang, 'triage', 'noDoctor'),
+      aiGenerated: true,
     };
-  } catch (_) {
+  } catch (err) {
+    console.warn('triageAgent AI call failed, using fallback:', err.message);
     const fallback = triageFallback(symptoms, lang);
     return {
       score: fallback.score,
@@ -334,6 +302,7 @@ Rules:
       needsDoctorMsg: fallback.needsDoctor
         ? getTranslation(lang, 'triage', 'needsDoctor')
         : getTranslation(lang, 'triage', 'noDoctor'),
+      aiGenerated: false,
     };
   }
 }

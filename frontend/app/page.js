@@ -92,7 +92,7 @@ export default function Home() {
   const [clinics, setClinics] = useState([]);
   const [selectedClinic, setSelectedClinic] = useState(null);
   const [transport, setTransport] = useState(null);
-  const [userLocation, setUserLocation] = useState({ lat: 12.9716, lng: 77.5946 });
+  const [userLocation, setUserLocation] = useState({ lat: 17.3850, lng: 78.4867 });
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [trackingData, setTrackingData] = useState(null);
@@ -136,7 +136,7 @@ export default function Home() {
       navigator.geolocation.getCurrentPosition(
         pos => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         () => {
-          setUserLocation({ lat: 12.9716, lng: 77.5946 });
+          setUserLocation({ lat: 17.3850, lng: 78.4867 });
         }
       );
     }
